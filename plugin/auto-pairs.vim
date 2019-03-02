@@ -100,6 +100,10 @@ if !exists('g:AutoPairsSmartQuotes')
   let g:AutoPairsSmartQuotes = 1
 endif
 
+if !exists('g:AutoPairsDisableBeforeNonSpace')
+  let g:AutoPairsDisableBeforeNonSpace = 0
+endif
+
 " 7.4.849 support <C-G>U to avoid breaking '.'
 " Issue talk: https://github.com/jiangmiao/auto-pairs/issues/3
 " Vim note: https://github.com/vim/vim/releases/tag/v7.4.849
@@ -157,6 +161,13 @@ func! s:getline()
   return [before, after, afterline]
 endf
 
+func! s:getCharacterBeforeCursor()
+  let line = getline('.')
+  let pos = col('.') - 2
+
+  return strpart(line, pos, 1)
+endf
+
 " split text to two part
 " returns [orig, text_before_open, open]
 func! s:matchend(text, open)
@@ -174,6 +185,27 @@ func! s:matchbegin(text, close)
       return []
     end
     return [a:text, m, strpart(a:text, len(m), len(a:text)-len(m))]
+endf
+
+
+func! s:getClosingCounterpart(exactString)
+  for [open, close, opt] in b:AutoPairsList
+	  if a:exactString is open
+		  return close
+	  end
+  endfor
+
+  throw "String '".a:exactString."' is not defined as opening any pair."
+endf
+
+func! s:displayWarning(message)
+  echohl WarningMsg
+  let sm = &showmode
+  set noshowmode
+  echom a:message
+  sleep 3
+  let &showmode = sm
+  echohl None
 endf
 
 " add or delete pairs base on g:AutoPairs
@@ -204,10 +236,15 @@ func! AutoPairsInsert(key)
 
   let [before, after, afterline] = s:getline()
 
+  let prev = before[-1:-1]
   " Ignore auto close if prev character is \
-  if before[-1:-1] == '\'
+  if prev == '\'
     return a:key
   end
+
+  if g:AutoPairsDisableBeforeNonSpace && prev =~# '\v^\s*$\V' && next =~# '\v^\S+$\V'
+	  return a:key "
+  endif
 
   " check open pairs
   for [open, close, opt] in b:AutoPairsList
@@ -215,10 +252,10 @@ func! AutoPairsInsert(key)
     let m = matchstr(afterline, '^\v\s*\zs\V'.close)
     if len(ms) > 0
       " process the open pair
-      
+
       " remove inserted pair
-      " eg: if the pairs include < > and  <!-- --> 
-      " when <!-- is detected the inserted pair < > should be clean up 
+      " eg: if the pairs include < > and  <!-- -->
+      " when <!-- is detected the inserted pair < > should be clean up
       let target = ms[1]
       let openPair = ms[2]
       if len(openPair) == 1 && m == openPair
@@ -336,8 +373,30 @@ endf
 " Fast wrap the word in brackets
 func! AutoPairsFastWrap()
   let c = @"
-  normal! x
+  " TODO why not match more than one character back
+  " (with possible selection if ambigous)?
+  let prev = s:getCharacterBeforeCursor()
+  try
+    let counterpart = s:getClosingCounterpart(prev)
+  catch
+    call s:displayWarning(v:exception)
+    return ""
+  endtry
+
+  if !g:AutoPairsDisableBeforeNonSpace
+    execute "normal! ".len(counterpart)."x"
+    let deletedString = @"
+    if deletedString isnot counterpart
+      call s:displayWarning("Possible trying wrap with something that is not defined pair")
+    undo
+    let @" = c
+    return ""
+    endif
+  else
+    let @" = counterpart
+  endif
   let [before, after, ig] = s:getline()
+
   if after[0] =~ '\v[\{\[\(\<]'
     normal! %
     normal! p
@@ -499,7 +558,7 @@ func! AutoPairsInit()
       let opt['multiline'] = 0
     end
     let m = matchlist(close, '\v(.*)//(.*)$')
-    if len(m) > 0 
+    if len(m) > 0
       if m[2] =~ 'n'
         let opt['mapclose'] = 0
       end
