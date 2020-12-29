@@ -35,3 +35,11 @@ function! Test_fast_wrap_with_disabled_pairing_before_nonspace()
   call <SID>insertInlineText(1, 1, "(\<M-e>")
   call assert_equal('("wrapMe")', getline("."))
 endfunction
+
+function! Test_fast_wrap_with_disabled_pairing_before_nonspace_2()
+  let g:AutoPairsDisableBeforeNonSpace = 1
+  call <SID>insertInlineText(1, 1, 'let v = expand"~/.vim"')
+  " TODO Replace by 'g:AutoPairsShortcutFastWrap' correctly
+  call <SID>insertInlineText(1, 15, "(\<M-e>")
+  call assert_equal('let v = expand("~/.vim")', getline("."))
+endfunction

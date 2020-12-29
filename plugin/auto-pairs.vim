@@ -171,31 +171,50 @@ endf
 " split text to two part
 " returns [orig, text_before_open, open]
 func! s:matchend(text, open)
-    let m = matchstr(a:text, '\V'.a:open.'\v$')
-    if m == ""
-      return []
-    end
-    return [a:text, strpart(a:text, 0, len(a:text)-len(m)), m]
+  let m = matchstr(a:text, '\V'.a:open.'\v$')
+  if m == ""
+    return []
+  end
+  return [a:text, strpart(a:text, 0, len(a:text)-len(m)), m]
 endf
 
 " returns [orig, close, text_after_close]
 func! s:matchbegin(text, close)
-    let m = matchstr(a:text, '^\V'.a:close)
-    if m == ""
-      return []
-    end
-    return [a:text, m, strpart(a:text, len(m), len(a:text)-len(m))]
+  let m = matchstr(a:text, '^\V'.a:close)
+  if m == ""
+    return []
+  end
+  return [a:text, m, strpart(a:text, len(m), len(a:text)-len(m))]
 endf
 
+func! s:isOpeningCharacter(char)
+  for [open, close, opt] in b:AutoPairsList
+    if a:char =~# open
+      return 1
+    end
+  endfor
+
+  return 0
+endf
 
 func! s:getClosingCounterpart(exactString)
   for [open, close, opt] in b:AutoPairsList
-	  if a:exactString is open
-		  return close
-	  end
+    if a:exactString is open
+      return close
+    end
   endfor
 
   throw "String '".a:exactString."' is not defined as opening any pair."
+endf
+
+func! s:isSpecialPreviousCharacter(char)
+  for specialCharacter in b:SpecialPreviousCharacterList
+    if a:char is specialCharacter
+      return 1
+    end
+  endfor
+
+  return 0
 endf
 
 func! s:displayWarning(message)
@@ -237,14 +256,21 @@ func! AutoPairsInsert(key)
   let [before, after, afterline] = s:getline()
 
   let prev = before[-1:-1]
+  let next = after[0]
+
   " Ignore auto close if prev character is \
   if prev == '\'
     return a:key
   end
 
+  " if ((prev isnot '') && !<SID>isSpecialPreviousCharacter(char) ! <SID>isOpeningCharacter(prev) && (prev =~# '\v^\S*$\V') && (next =~# '\v^\s*$\V'))
+  " return a:key
+  " endif
+
   if g:AutoPairsDisableBeforeNonSpace && prev =~# '\v^\s*$\V' && next =~# '\v^\S+$\V'
-	  return a:key "
+    return a:key "
   endif
+
 
   " check open pairs
   for [open, close, opt] in b:AutoPairsList
@@ -388,9 +414,9 @@ func! AutoPairsFastWrap()
     let deletedString = @"
     if deletedString isnot counterpart
       call s:displayWarning("Possible trying wrap with something that is not defined pair")
-    undo
-    let @" = c
-    return ""
+      undo
+      let @" = c
+      return ""
     endif
   else
     let @" = counterpart
@@ -544,6 +570,7 @@ func! AutoPairsInit()
   let b:autopairs_return_pos = 0
   let b:autopairs_saved_pair = [0, 0]
   let b:AutoPairsList = []
+  let b:SpecialPreviousCharacterList = ['$'] " TODO configurability per ft
 
   " buffer level map pairs keys
   " n - do not map the first charactor of closed pair to close key
